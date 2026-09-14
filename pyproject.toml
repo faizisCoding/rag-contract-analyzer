@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "contract-rag"
+version = "0.1.0"
+description = "Evidence-grounded legal contract analysis using hybrid RAG"
+requires-python = ">=3.12,<3.13"
+
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+    "pydantic-settings",
+    "python-multipart",
+    "python-dotenv",
+    "docling",
+    "pymupdf",
+    "pillow",
+    "qdrant-client",
+    "fastembed",
+    "sentence-transformers",
+    "ollama",
+    "tenacity",
+    "httpx",
+    "sqlalchemy",
+    "psycopg[binary]",
+    "alembic",
+    "streamlit",
+    "pandas",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+    "pre-commit",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

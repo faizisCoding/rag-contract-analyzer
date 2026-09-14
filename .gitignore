@@ -1,0 +1,65 @@
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python caches and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python packaging artifacts
+*.egg-info/
+build/
+dist/
+.eggs/
+pip-wheel-metadata/
+
+# Test and quality-tool output
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Uploaded and generated contract data
+data/
+uploads/
+storage/
+outputs/
+artifacts/
+
+# Vector databases and local databases
+qdrant_data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Model and application caches
+.cache/
+models/
+
+# Logs
+*.log
+logs/
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# IDE configuration
+.vscode/
+.idea/
+
+# Windows and macOS files
+Thumbs.db
+Desktop.ini
+.DS_Store

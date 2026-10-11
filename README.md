@@ -46,6 +46,8 @@ Create and activate a Python 3.12 environment:
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
+```
+
 ## Preparing external datasets
 
 `scripts/prepare_dataset.py` normalizes source documents into the same canonical

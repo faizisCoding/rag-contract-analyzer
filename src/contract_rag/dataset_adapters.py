@@ -137,6 +137,9 @@ def iter_cuad(path: str | Path) -> Iterator[DatasetRow]:
 
 
 def _read_csv(path: str | Path) -> Iterator[dict[str, str]]:
+    # Full policy documents can exceed Python's default CSV field limit.
+    csv.field_size_limit(100_000_000)
+
     with Path(path).open("r", encoding="utf-8-sig", newline="") as stream:
         yield from csv.DictReader(stream)
 
@@ -145,22 +148,25 @@ def iter_tosdr(
     documents_csv: str | Path,
     points_csv: str | Path | None = None,
 ) -> Iterator[DatasetRow]:
-    """Adapt ToS;DR raw documents and optional quoted-point annotations.
+    """Adapt ToS;DR documents and optional quoted-point annotations.
 
-    ToS;DR quote_end is inclusive in the raw export; this adapter writes
-    project-standard half-open end offsets.
+    Source offsets are checked against the quote using either end convention.
+    Output spans always use an exclusive end. Unique exact quote matches can
+    recover positions when source offsets do not match.
     """
 
     points_by_document: dict[str, list[dict[str, str]]] = defaultdict(list)
     if points_csv:
         for point in _read_csv(points_csv):
-            points_by_document[str(point.get("document_id", ""))].append(point)
+            document_id = (point.get("document_id") or "").strip()
+            points_by_document[document_id].append(point)
 
     for record in _read_csv(documents_csv):
-        source_id = str(record.get("id", "")).strip()
-        text = record.get("text", "")
+        source_id = (record.get("id") or "").strip()
+        text = record.get("text") or ""
         if not source_id or not text.strip():
             continue
+
         agreement_name = (record.get("name") or "").lower()
         inferred_type = (
             DocumentType.OTHER
@@ -169,6 +175,7 @@ def iter_tosdr(
             if "license" in agreement_name or "eula" in agreement_name
             else DocumentType.TERMS_OF_SERVICE
         )
+
         document = _document(
             source="ToS;DR",
             source_id=source_id,
@@ -184,37 +191,81 @@ def iter_tosdr(
                 "source_format": "tosdr_documents_csv",
             },
         )
+
         annotations: list[dict[str, Any]] = []
         for point in points_by_document.get(source_id, []):
-            quote = point.get("quote", "")
-            start_raw, end_raw = point.get("quote_start", ""), point.get("quote_end", "")
+            quote = point.get("quote_text") or point.get("quote") or ""
+            start_raw = point.get("quote_start", "")
+            end_raw = point.get("quote_end", "")
+
+            start, end_exclusive = -1, -1
+            exact = False
+            match_method = "unmatched"
+
             try:
-                start, end_exclusive = int(start_raw), int(end_raw) + 1
-                exact = (
-                    start >= 0
-                    and end_exclusive <= len(text)
-                    and text[start:end_exclusive] == quote
-                )
+                source_start = int(start_raw)
+                source_end = int(end_raw)
             except (TypeError, ValueError):
-                start, end_exclusive, exact = -1, -1, False
+                source_start, source_end = -1, -1
+
+            if quote.strip():
+                # Prefer exclusive source offsets when the quote matches.
+                if (
+                    0 <= source_start < source_end <= len(text)
+                    and text[source_start:source_end] == quote
+                ):
+                    start, end_exclusive = source_start, source_end
+                    exact = True
+                    match_method = "source_exclusive"
+
+                # Support inclusive offsets only when verified by exact text.
+                elif (
+                    0 <= source_start <= source_end < len(text)
+                    and text[source_start : source_end + 1] == quote
+                ):
+                    start, end_exclusive = source_start, source_end + 1
+                    exact = True
+                    match_method = "source_inclusive"
+
+                else:
+                    position = text.find(quote)
+                    if position >= 0:
+                        if text.find(quote, position + 1) == -1:
+                            start = position
+                            end_exclusive = position + len(quote)
+                            exact = True
+                            match_method = "unique_exact_search"
+                        else:
+                            match_method = "ambiguous"
+            else:
+                match_method = "missing_quote"
+
             annotations.append(
                 {
                     "annotation_id": str(point.get("id") or point.get("old_id") or ""),
                     "document_id": document.document_id,
                     "source_dataset": "ToS;DR",
                     "task": "terms_point",
-                    "label": point.get("title") or point.get("topic_id") or "unspecified",
+                    "label": (point.get("title") or point.get("topic_id") or "unspecified"),
                     "quote": quote,
                     "evidence_spans": (
-                        [{"start_char": start, "end_char": end_exclusive, "text": quote}]
-                        if exact and quote
+                        [
+                            {
+                                "start_char": start,
+                                "end_char": end_exclusive,
+                                "text": quote,
+                            }
+                        ]
+                        if exact
                         else []
                     ),
                     "offsets_validated": exact,
                     "source_quote_start": start_raw,
-                    "source_quote_end_inclusive": end_raw,
+                    "source_quote_end": end_raw,
+                    "evidence_match_method": match_method,
                 }
             )
+
         yield DatasetRow(document, tuple(annotations))
 
 
